@@ -1,28 +1,78 @@
-<!doctype html>
-<html lang="cs">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Moje první stránka</title>
-    <style>
-      body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 2rem; }
-      header { margin-bottom: 1.5rem }
-      pre { background:#f6f8fa; padding:1rem; border-radius:6px }
-    </style>
-  </head>
-  <body>
-    <header>
-      <h1>Vítejte — jednoduchá web stránka</h1>
-      <p>Toto je ukázkový `index.html` přidaný do repozitáře.</p>
-    </header>
-    <main>
-      <p>Další kroky:</p>
-      <ul>
-        <li>Upravte tuto stránku v editoru.</li>
-        <li>Uložte, přidejte do Gitu a commitněte.</li>
-      </ul>
-      <p>Zobrazit README:</p>
-      <pre>cat README.md</pre>
-    </main>
-  </body>
-</html>
+<body style="margin:0; overflow:hidden;">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // ---- Add Light ----
+    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+    scene.add(light);
+
+    // ---- Add object to spawn when image is detected ----
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x44ff88 })
+    );
+    cube.visible = false;
+    scene.add(cube);
+
+    // ---- Start AR with image tracking ----
+    const button = ARButton.createButton(renderer, {
+      requiredFeatures: ["image-tracking"],
+      trackedImages: [
+        {
+          src: "marker-image.jpg",   // <-- put your image here
+          widthInMeters: 0.15        // real-world width of the image
+        }
+      ]
+    });
+    document.body.appendChild(button);
+
+    // Map index → pose matrix
+    const trackedImageMap = new Map();
+
+    renderer.setAnimationLoop((time, frame) => {
+      if (frame) {
+        const results = frame.getImageTrackingResults();
+
+        for (const result of results) {
+          const imageIndex = result.index;
+          const state = result.trackingState;
+
+          if (state === "tracked") {
+            const refSpace = renderer.xr.getReferenceSpace();
+            const pose = frame.getPose(result.imageSpace, refSpace);
+
+            if (pose) {
+              cube.visible = true;
+              cube.matrix.fromArray(pose.transform.matrix);
+              cube.matrix.decompose(cube.position, cube.quaternion, cube.scale);
+
+              // raise cube slightly above image
+              cube.position.y += 0.05;
+            }
+          } else {
+            cube.visible = false;
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
