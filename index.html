@@ -11,13 +11,34 @@
   <script type="module">
     import * as THREE from 'three';
     import { ARButton } from 'three/addons/webxr/ARButton.js';
+    // -- Debug helper: on-screen log (useful when you can't open remote devtools) --
+    const dbg = document.createElement('div');
+    dbg.style = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:rgba(0,0,0,0.6);color:#0f0;padding:6px;font-family:monospace;font-size:12px;z-index:9999';
+    dbg.id = 'debug-log';
+    document.body.appendChild(dbg);
+    function log(...args) {
+      console.log(...args);
+      const el = document.createElement('div');
+      el.textContent = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      dbg.appendChild(el);
+      dbg.scrollTop = dbg.scrollHeight;
+    }
+
+    log('Script start');
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera();
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    camera.position.set(0, 1.6, 0);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
+
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+    });
 
     // ---- Add Light ----
     const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
@@ -31,48 +52,114 @@
     cube.visible = false;
     scene.add(cube);
 
-    // ---- Start AR with image tracking ----
-    const button = ARButton.createButton(renderer, {
-      requiredFeatures: ["image-tracking"],
-      trackedImages: [
-        {
-          src: "marker-image.jpg",   // <-- put your image here
-          widthInMeters: 0.15        // real-world width of the image
-        }
-      ]
-    });
-    document.body.appendChild(button);
+    // small UI container for buttons
+    const ui = document.createElement('div');
+    ui.style = 'position:fixed;top:10px;left:10px;z-index:10000;display:flex;gap:8px;flex-direction:column';
+    document.body.appendChild(ui);
 
-    // Map index → pose matrix
+    // helper to test marker availability
+    async function checkMarker() {
+      try {
+        const res = await fetch('marker-image.jpg', { method: 'HEAD' });
+        log('marker HEAD status:', res.status);
+        if (res.ok) log('marker-image.jpg reachable'); else log('marker-image.jpg not reachable (HTTP ' + res.status + ')');
+      } catch (e) {
+        log('marker fetch error:', e);
+      }
+    }
+
+    // Quick WebXR support checks
+    const hasXR = !!navigator.xr;
+    log('navigator.xr present:', hasXR);
+    if (hasXR && navigator.xr.isSessionSupported) {
+      navigator.xr.isSessionSupported('immersive-ar').then(s => log('immersive-ar supported:', s)).catch(e => log('isSessionSupported error:', e));
+    }
+
+    // Create ARButton but wrap in try/catch — append into our UI container
+    try {
+      const arButton = ARButton.createButton(renderer, {
+        requiredFeatures: ['image-tracking'],
+        trackedImages: [{ src: 'marker-image.jpg', widthInMeters: 0.15 }]
+      });
+      arButton.style.opacity = '0.95';
+      ui.appendChild(arButton);
+      arButton.addEventListener && arButton.addEventListener('click', () => log('ARButton clicked'));
+      log('ARButton created');
+    } catch (e) {
+      log('ARButton.createButton threw:', e);
+    }
+
+    // Add a fallback button: try simple AR session (no image-tracking) to test basic XR support
+    const testBtn = document.createElement('button');
+    testBtn.textContent = 'Test simple AR session';
+    testBtn.style.padding = '8px 10px';
+    ui.appendChild(testBtn);
+
+    testBtn.addEventListener('click', async () => {
+      log('Test button clicked — requesting session (local-floor)');
+      if (!navigator.xr) return log('navigator.xr not available');
+      try {
+        const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] });
+        renderer.xr.setSession(session);
+        session.addEventListener('end', () => log('session ended'));
+        log('simple session started:', session);
+      } catch (err) {
+        log('requestSession failed:', err);
+      }
+    });
+
+    // Add a button to test image-tracking request directly (will usually reject if feature unsupported)
+    const imgBtn = document.createElement('button');
+    imgBtn.textContent = 'Test image-tracking request';
+    imgBtn.style.padding = '8px 10px';
+    ui.appendChild(imgBtn);
+    imgBtn.addEventListener('click', async () => {
+      log('Image-tracking test clicked — requesting session with image-tracking');
+      if (!navigator.xr) return log('navigator.xr not available');
+      try {
+        const session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['image-tracking'],
+          trackedImages: [{ src: 'marker-image.jpg', widthInMeters: 0.15 }]
+        });
+        renderer.xr.setSession(session);
+        log('image-tracking session started:', session);
+      } catch (err) {
+        log('image-tracking request failed:', err);
+      }
+    });
+
+    // Map index → pose matrix (for future use)
     const trackedImageMap = new Map();
 
+    // Animation loop
     renderer.setAnimationLoop((time, frame) => {
       if (frame) {
-        const results = frame.getImageTrackingResults();
-
-        for (const result of results) {
-          const imageIndex = result.index;
-          const state = result.trackingState;
-
-          if (state === "tracked") {
-            const refSpace = renderer.xr.getReferenceSpace();
-            const pose = frame.getPose(result.imageSpace, refSpace);
-
-            if (pose) {
-              cube.visible = true;
-              cube.matrix.fromArray(pose.transform.matrix);
-              cube.matrix.decompose(cube.position, cube.quaternion, cube.scale);
-
-              // raise cube slightly above image
-              cube.position.y += 0.05;
+        try {
+          const results = frame.getImageTrackingResults ? frame.getImageTrackingResults() : [];
+          for (const result of results) {
+            const state = result.trackingState;
+            if (state === 'tracked') {
+              const refSpace = renderer.xr.getReferenceSpace();
+              const pose = frame.getPose(result.imageSpace, refSpace);
+              if (pose) {
+                cube.visible = true;
+                cube.matrix.fromArray(pose.transform.matrix);
+                cube.matrix.decompose(cube.position, cube.quaternion, cube.scale);
+                cube.position.y += 0.05;
+              }
+            } else {
+              cube.visible = false;
             }
-          } else {
-            cube.visible = false;
           }
+        } catch (e) {
+          // don't spam console, but show once
+          log('frame processing error:', e);
         }
       }
-
       renderer.render(scene, camera);
     });
+
+    // Initial checks
+    checkMarker();
   </script>
 </body>
