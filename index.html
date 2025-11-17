@@ -11,6 +11,7 @@
   <script type="module">
     import * as THREE from 'three';
     import { ARButton } from 'three/addons/webxr/ARButton.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     // -- Debug helper: on-screen log (useful when you can't open remote devtools) --
     const dbg = document.createElement('div');
     dbg.style = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:rgba(0,0,0,0.6);color:#0f0;padding:6px;font-family:monospace;font-size:12px;z-index:9999';
@@ -51,6 +52,22 @@
     );
     cube.visible = false;
     scene.add(cube);
+
+    // ---- Load GLB model (kostka.glb) ----
+    let gltfModel = null;
+    const loader = new GLTFLoader();
+    loader.load('kostka.glb', (gltf) => {
+      gltfModel = gltf.scene;
+      // optional: adjust initial scale/rotation if needed
+      gltfModel.visible = false;
+      gltfModel.scale.set(0.2, 0.2, 0.2);
+      scene.add(gltfModel);
+      log('kostka.glb loaded');
+    }, (xhr) => {
+      // progress
+    }, (err) => {
+      log('kostka.glb load error:', err);
+    });
 
     // small UI container for buttons
     const ui = document.createElement('div');
@@ -142,10 +159,18 @@
               const refSpace = renderer.xr.getReferenceSpace();
               const pose = frame.getPose(result.imageSpace, refSpace);
               if (pose) {
-                cube.visible = true;
-                cube.matrix.fromArray(pose.transform.matrix);
-                cube.matrix.decompose(cube.position, cube.quaternion, cube.scale);
-                cube.position.y += 0.05;
+                // prefer GLB model if loaded; otherwise show fallback cube
+                if (gltfModel) {
+                  gltfModel.visible = true;
+                  gltfModel.matrix.fromArray(pose.transform.matrix);
+                  gltfModel.matrix.decompose(gltfModel.position, gltfModel.quaternion, gltfModel.scale);
+                  gltfModel.position.y += 0.05;
+                } else {
+                  cube.visible = true;
+                  cube.matrix.fromArray(pose.transform.matrix);
+                  cube.matrix.decompose(cube.position, cube.quaternion, cube.scale);
+                  cube.position.y += 0.05;
+                }
               }
             } else {
               cube.visible = false;
