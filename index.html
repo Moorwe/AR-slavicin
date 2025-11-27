@@ -9,11 +9,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta charset="utf-8" />
 
-    <!-- We'll use importmap to manage our JavaScript modules from CDNs -->
+    <!-- 
+      FIX: Updated importmap.
+      The error "Failed to resolve module specifier 'three/addons/...' "
+      happens because the MindAR library tries to import optional parts of three.js
+      (like renderers) using the "three/addons/" path.
+      The original importmap only defined "three", not "three/addons/".
+      This change adds the path for "three/addons/" so the browser
+      can find those files.
+    -->
     <script type="importmap">
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
           "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
         }
       }
@@ -119,6 +128,17 @@
         font-size: 0.9rem;
         text-align: center;
       }
+
+      /* NEW: Style for the error message */
+      #error-message {
+        color: #ffcccc;
+        background-color: rgba(255, 0, 0, 0.2);
+        border: 1px solid #ffcccc;
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 20px;
+        max-width: 400px;
+      }
     </style>
   </head>
   <body>
@@ -134,6 +154,8 @@
         target image to see the 3D object.
       </p>
       <button id="start-button">Start</button>
+      <!-- NEW: Error message container -->
+      <div id="error-message" class="hidden"></div>
       <p style="margin-top: 30px">
         <a
           href="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
@@ -165,11 +187,15 @@
         const startOverlay = document.getElementById("start-overlay");
         const loader = document.getElementById("loader");
         const instructions = document.getElementById("instructions");
+        // NEW: Get the error message element
+        const errorMessage = document.getElementById("error-message");
 
         let mindarThree = null;
 
         // This function sets up and starts the AR experience
         const startAR = async () => {
+          // NEW: Hide any previous errors
+          errorMessage.classList.add("hidden");
           // Show loader and hide button
           startButton.classList.add("hidden");
           loader.classList.remove("hidden");
@@ -232,7 +258,10 @@
             console.error("Failed to start AR:", error);
             loader.classList.add("hidden");
             startButton.classList.remove("hidden");
-            alert("Failed to start AR. Please ensure you've granted camera permissions.");
+            
+            // NEW: Show a user-friendly error message instead of alert()
+            errorMessage.textContent = `Failed to start AR. Please ensure you've granted camera permissions and are using a secure (https) connection. Error: ${error.message}`;
+            errorMessage.classList.remove("hidden");
           }
         };
 
