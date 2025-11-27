@@ -1,0 +1,13 @@
+{
+  "name": "ar-slavicin",
+  "version": "1.0.0",
+  "description": "Three.js + MindAR image tracking demo. Start a local server to allow camera access.",
+  "scripts": {
+    "start": "http-server ./ -p 8080 -c-1",
+    "dev": "http-server ./ -a localhost -p 8080 -c-1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "license": "MIT"
+}

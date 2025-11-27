@@ -1,190 +1,244 @@
-<body style="margin:0; overflow:hidden;">
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
-    }
-  }
-  </script>
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Three.js AR Image Tracker</title>
+    <!--
+      Viewport meta tag is essential for responsive and mobile-first design.
+      It ensures the page renders correctly on different devices.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8" />
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { ARButton } from 'three/addons/webxr/ARButton.js';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    // -- Debug helper: on-screen log (useful when you can't open remote devtools) --
-    const dbg = document.createElement('div');
-    dbg.style = 'position:fixed;left:0;right:0;bottom:0;max-height:40vh;overflow:auto;background:rgba(0,0,0,0.6);color:#0f0;padding:6px;font-family:monospace;font-size:12px;z-index:9999';
-    dbg.id = 'debug-log';
-    document.body.appendChild(dbg);
-    function log(...args) {
-      console.log(...args);
-      const el = document.createElement('div');
-      el.textContent = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
-      dbg.appendChild(el);
-      dbg.scrollTop = dbg.scrollHeight;
-    }
-
-    log('Script start');
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-    camera.position.set(0, 1.6, 0);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true;
-    document.body.appendChild(renderer.domElement);
-
-    window.addEventListener('resize', () => {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-    });
-
-    // ---- Add Light ----
-    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-    scene.add(light);
-
-    // ---- Add object to spawn when image is detected ----
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.1, 0.1, 0.1),
-      new THREE.MeshStandardMaterial({ color: 0x44ff88 })
-    );
-    cube.visible = false;
-    scene.add(cube);
-
-    // ---- Load GLB model (kostka.glb) ----
-    let gltfModel = null;
-    const loader = new GLTFLoader();
-    loader.load('kostka.glb', (gltf) => {
-      gltfModel = gltf.scene;
-      // optional: adjust initial scale/rotation if needed
-      gltfModel.visible = false;
-      gltfModel.scale.set(0.2, 0.2, 0.2);
-      scene.add(gltfModel);
-      log('kostka.glb loaded');
-    }, (xhr) => {
-      // progress
-    }, (err) => {
-      log('kostka.glb load error:', err);
-    });
-
-    // small UI container for buttons
-    const ui = document.createElement('div');
-    ui.style = 'position:fixed;top:10px;left:10px;z-index:10000;display:flex;gap:8px;flex-direction:column';
-    document.body.appendChild(ui);
-
-    // helper to test marker availability
-    async function checkMarker() {
-      try {
-        const res = await fetch('marker-image.jpg', { method: 'HEAD' });
-        log('marker HEAD status:', res.status);
-        if (res.ok) log('marker-image.jpg reachable'); else log('marker-image.jpg not reachable (HTTP ' + res.status + ')');
-      } catch (e) {
-        log('marker fetch error:', e);
-      }
-    }
-
-    // Quick WebXR support checks
-    const hasXR = !!navigator.xr;
-    log('navigator.xr present:', hasXR);
-    if (hasXR && navigator.xr.isSessionSupported) {
-      navigator.xr.isSessionSupported('immersive-ar').then(s => log('immersive-ar supported:', s)).catch(e => log('isSessionSupported error:', e));
-    }
-
-    // Create ARButton but wrap in try/catch — append into our UI container
-    try {
-      const arButton = ARButton.createButton(renderer, {
-        requiredFeatures: ['image-tracking'],
-        trackedImages: [{ src: 'marker-image.jpg', widthInMeters: 0.15 }]
-      });
-      arButton.style.opacity = '0.95';
-      ui.appendChild(arButton);
-      arButton.addEventListener && arButton.addEventListener('click', () => log('ARButton clicked'));
-      log('ARButton created');
-    } catch (e) {
-      log('ARButton.createButton threw:', e);
-    }
-
-    // Add a fallback button: try simple AR session (no image-tracking) to test basic XR support
-    const testBtn = document.createElement('button');
-    testBtn.textContent = 'Test simple AR session';
-    testBtn.style.padding = '8px 10px';
-    ui.appendChild(testBtn);
-
-    testBtn.addEventListener('click', async () => {
-      log('Test button clicked — requesting session (local-floor)');
-      if (!navigator.xr) return log('navigator.xr not available');
-      try {
-        const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] });
-        renderer.xr.setSession(session);
-        session.addEventListener('end', () => log('session ended'));
-        log('simple session started:', session);
-      } catch (err) {
-        log('requestSession failed:', err);
-      }
-    });
-
-    // Add a button to test image-tracking request directly (will usually reject if feature unsupported)
-    const imgBtn = document.createElement('button');
-    imgBtn.textContent = 'Test image-tracking request';
-    imgBtn.style.padding = '8px 10px';
-    ui.appendChild(imgBtn);
-    imgBtn.addEventListener('click', async () => {
-      log('Image-tracking test clicked — requesting session with image-tracking');
-      if (!navigator.xr) return log('navigator.xr not available');
-      try {
-        const session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['image-tracking'],
-          trackedImages: [{ src: 'marker-image.jpg', widthInMeters: 0.15 }]
-        });
-        renderer.xr.setSession(session);
-        log('image-tracking session started:', session);
-      } catch (err) {
-        log('image-tracking request failed:', err);
-      }
-    });
-
-    // Map index → pose matrix (for future use)
-    const trackedImageMap = new Map();
-
-    // Animation loop
-    renderer.setAnimationLoop((time, frame) => {
-      if (frame) {
-        try {
-          const results = frame.getImageTrackingResults ? frame.getImageTrackingResults() : [];
-          for (const result of results) {
-            const state = result.trackingState;
-            if (state === 'tracked') {
-              const refSpace = renderer.xr.getReferenceSpace();
-              const pose = frame.getPose(result.imageSpace, refSpace);
-              if (pose) {
-                // prefer GLB model if loaded; otherwise show fallback cube
-                if (gltfModel) {
-                  gltfModel.visible = true;
-                  gltfModel.matrix.fromArray(pose.transform.matrix);
-                  gltfModel.matrix.decompose(gltfModel.position, gltfModel.quaternion, gltfModel.scale);
-                  gltfModel.position.y += 0.05;
-                } else {
-                  cube.visible = true;
-                  cube.matrix.fromArray(pose.transform.matrix);
-                  cube.matrix.decompose(cube.position, cube.quaternion, cube.scale);
-                  cube.position.y += 0.05;
-                }
-              }
-            } else {
-              cube.visible = false;
-            }
-          }
-        } catch (e) {
-          // don't spam console, but show once
-          log('frame processing error:', e);
+    <!-- We'll use importmap to manage our JavaScript modules from CDNs -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
         }
       }
-      renderer.render(scene, camera);
-    });
+    </script>
 
-    // Initial checks
-    checkMarker();
-  </script>
-</body>
+    <style>
+      /* Basic styles for a fullscreen experience */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        background-color: #222;
+        color: white;
+      }
+
+      /* This container will hold the AR scene (camera feed and 3D content) */
+      #ar-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        /* The MindAR library will inject the canvas and video here */
+      }
+
+      /* This overlay provides a "Start" button. 
+        Requesting camera access must be tied to a user action (like a click).
+      */
+      #start-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        text-align: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      #start-button {
+        padding: 15px 30px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: white;
+        background: linear-gradient(135deg, #6e8efb, #a777e3);
+        border: none;
+        border-radius: 30px;
+        cursor: pointer;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s ease;
+      }
+
+      #start-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      /* Simple loading spinner */
+      #loader {
+        border: 8px solid #f3f3f3;
+        border-top: 8px solid #6e8efb;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Class to hide elements */
+      .hidden {
+        display: none !important;
+      }
+
+      /* Instructions for the user */
+      #instructions {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 10px 20px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border-radius: 10px;
+        z-index: 5;
+        font-size: 0.9rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 
+      This overlay will be shown first. 
+      The user must click "Start" to grant camera permissions.
+    -->
+    <div id="start-overlay">
+      <div id="loader" class="hidden"></div>
+      <h1 style="margin-top: 0">Three.js AR Image Tracker</h1>
+      <p style="max-width: 400px">
+        Click "Start" to activate your camera. You will need to show it the
+        target image to see the 3D object.
+      </p>
+      <button id="start-button">Start</button>
+      <p style="margin-top: 30px">
+        <a
+          href="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="color: #9ecbff"
+          >Open Target Image in New Tab</a
+        >
+      </p>
+    </div>
+
+    <!-- This is the main container for our AR app -->
+    <div id="ar-container"></div>
+
+    <!-- Instructions that appear after starting -->
+    <div id="instructions" class="hidden">
+      Point your camera at the "MindAR" card image.
+    </div>
+
+    <!-- Main application logic -->
+    <script type="module">
+      // Import the necessary modules
+      import * as THREE from "three";
+      import { MindARThree } from "mindar-image-three";
+
+      // Wait for the DOM to be fully loaded before running the app
+      document.addEventListener("DOMContentLoaded", () => {
+        const startButton = document.getElementById("start-button");
+        const startOverlay = document.getElementById("start-overlay");
+        const loader = document.getElementById("loader");
+        const instructions = document.getElementById("instructions");
+
+        let mindarThree = null;
+
+        // This function sets up and starts the AR experience
+        const startAR = async () => {
+          // Show loader and hide button
+          startButton.classList.add("hidden");
+          loader.classList.remove("hidden");
+
+          // 1. Initialize MindARThree
+          // We provide the container element and the path to our compiled image target.
+          // This .mind file is pre-compiled for a specific image.
+          mindarThree = new MindARThree({
+            container: document.getElementById("ar-container"),
+            imageTargetSrc:
+              "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
+            maxTrack: 1, // Track one image at a time
+          });
+
+          // 2. Get the renderer, scene, and camera from MindAR
+          const { renderer, scene, camera } = mindarThree;
+
+          // 3. Create a 3D object to place on the target
+          const geometry = new THREE.TorusKnotGeometry(0.3, 0.1, 100, 16);
+          const material = new THREE.MeshStandardMaterial({
+            color: 0x6e8efb,
+            metalness: 0.2,
+            roughness: 0.3,
+          });
+          const knot = new THREE.Mesh(geometry, material);
+          knot.position.set(0, 0, 0); // Position it at the center of the anchor
+
+          // 4. Create an anchor. The anchor is tied to the image target (index 0)
+          // The 3D object will be a child of this anchor's group.
+          const anchor = mindarThree.addAnchor(0);
+          anchor.group.add(knot); // anchor.group is a THREE.Group
+
+          // 5. Add lighting to the scene
+          const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+          scene.add(ambientLight);
+          const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+          directionalLight.position.set(1, 1, 1);
+          scene.add(directionalLight);
+
+          // 6. Start the MindAR engine
+          // This will request camera access and start tracking
+          try {
+            await mindarThree.start();
+
+            // 7. Start the render loop
+            renderer.setAnimationLoop(() => {
+              // Rotate the knot for a nice effect
+              knot.rotation.x += 0.01;
+              knot.rotation.y += 0.015;
+
+              // Render the scene
+              renderer.render(scene, camera);
+            });
+
+            // Hide the overlay and show instructions once started
+            startOverlay.classList.add("hidden");
+            instructions.classList.remove("hidden");
+          } catch (error) {
+            // Handle errors (e.g., user denies camera access)
+            console.error("Failed to start AR:", error);
+            loader.classList.add("hidden");
+            startButton.classList.remove("hidden");
+            alert("Failed to start AR. Please ensure you've granted camera permissions.");
+          }
+        };
+
+        // Add click event listener to the start button
+        startButton.addEventListener("click", startAR);
+      });
+    </script>
+  </body>
+</html>
