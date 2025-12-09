@@ -138,6 +138,7 @@
         padding: 10px;
         margin-top: 20px;
         max-width: 400px;
+        font-size: 0.9rem;
       }
     </style>
   </head>
@@ -196,6 +197,34 @@
         const startAR = async () => {
           // NEW: Hide any previous errors
           errorMessage.classList.add("hidden");
+
+          // --- SECURITY CHECKS ---
+          
+          // Check 1: Secure Context
+          if (!window.isSecureContext) {
+            errorMessage.innerHTML = `
+              <strong>Security Error:</strong> Camera access is blocked.<br><br>
+              You are likely accessing this via an insecure connection (HTTP).<br>
+              Browsers REQUIRE <strong>https://</strong> or <strong>localhost</strong> for AR.<br><br>
+              <em>If testing on mobile via IP (192.168...), this will not work. You need an HTTPS tunnel.</em>
+            `;
+            errorMessage.classList.remove("hidden");
+            return;
+          }
+
+          // Check 2: MediaDevices API existence
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            errorMessage.innerHTML = `
+              <strong>Browser Error:</strong> Camera API not found.<br><br>
+              Your browser may not support WebRTC or it is being blocked by a privacy setting.
+              Try using Chrome or Safari.
+            `;
+            errorMessage.classList.remove("hidden");
+            return;
+          }
+          
+          // --- END CHECKS ---
+
           // Show loader and hide button
           startButton.classList.add("hidden");
           loader.classList.remove("hidden");
@@ -203,12 +232,21 @@
           // 1. Initialize MindARThree
           // We provide the container element and the path to our compiled image target.
           // This .mind file is pre-compiled for a specific image.
-          mindarThree = new MindARThree({
-            container: document.getElementById("ar-container"),
-            imageTargetSrc:
-              "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
-            maxTrack: 1, // Track one image at a time
-          });
+          try {
+            mindarThree = new MindARThree({
+              container: document.getElementById("ar-container"),
+              imageTargetSrc:
+                "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
+              maxTrack: 1, // Track one image at a time
+            });
+          } catch (initError) {
+             console.error("Initialization Error", initError);
+             errorMessage.textContent = "Error initializing MindAR: " + initError.message;
+             errorMessage.classList.remove("hidden");
+             startButton.classList.remove("hidden");
+             loader.classList.add("hidden");
+             return;
+          }
 
           // 2. Get the renderer, scene, and camera from MindAR
           const { renderer, scene, camera } = mindarThree;
@@ -260,7 +298,11 @@
             startButton.classList.remove("hidden");
             
             // NEW: Show a user-friendly error message instead of alert()
-            errorMessage.textContent = `Failed to start AR. Please ensure you've granted camera permissions and are using a secure (https) connection. Error: ${error.message}`;
+            let msg = error.message;
+            if (msg.includes("Permission denied")) {
+              msg = "You denied camera access. Please reset permissions for this site and reload.";
+            }
+            errorMessage.textContent = `Start Failed: ${msg}`;
             errorMessage.classList.remove("hidden");
           }
         };
