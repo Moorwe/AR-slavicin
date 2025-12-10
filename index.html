@@ -1,315 +1,226 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>Three.js AR Image Tracker</title>
-    <!--
-      Viewport meta tag is essential for responsive and mobile-first design.
-      It ensures the page renders correctly on different devices.
-    -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta charset="utf-8" />
-
-    <!-- 
-      FIX: Updated importmap.
-      The error "Failed to resolve module specifier 'three/addons/...' "
-      happens because the MindAR library tries to import optional parts of three.js
-      (like renderers) using the "three/addons/" path.
-      The original importmap only defined "three", not "three/addons/".
-      This change adds the path for "three/addons/" so the browser
-      can find those files.
-    -->
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-          "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
-        }
-      }
-    </script>
-
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebXR AR Spawner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-      /* Basic styles for a fullscreen experience */
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif;
-        background-color: #222;
-        color: white;
-      }
-
-      /* This container will hold the AR scene (camera feed and 3D content) */
-      #ar-container {
-        width: 100%;
-        height: 100%;
-        position: relative;
-        /* The MindAR library will inject the canvas and video here */
-      }
-
-      /* This overlay provides a "Start" button. 
-        Requesting camera access must be tied to a user action (like a click).
-      */
-      #start-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 10;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        background-color: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(5px);
-        text-align: center;
-        padding: 20px;
-        box-sizing: border-box;
-      }
-
-      #start-button {
-        padding: 15px 30px;
-        font-size: 1.2rem;
-        font-weight: bold;
-        color: white;
-        background: linear-gradient(135deg, #6e8efb, #a777e3);
-        border: none;
-        border-radius: 30px;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        transition: all 0.3s ease;
-      }
-
-      #start-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-      }
-
-      /* Simple loading spinner */
-      #loader {
-        border: 8px solid #f3f3f3;
-        border-top: 8px solid #6e8efb;
-        border-radius: 50%;
-        width: 60px;
-        height: 60px;
-        animation: spin 1s linear infinite;
-        margin-bottom: 20px;
-      }
-
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: white;
         }
-        100% {
-          transform: rotate(360deg);
+
+        #info {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            pointer-events: none;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.2);
+            padding: 10px 0;
         }
-      }
 
-      /* Class to hide elements */
-      .hidden {
-        display: none !important;
-      }
+        h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+        }
 
-      /* Instructions for the user */
-      #instructions {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        padding: 10px 20px;
-        background: rgba(0, 0, 0, 0.6);
-        color: rgb(255, 255, 255);
-        border-radius: 10px;
-        z-index: 5;
-        font-size: 0.9rem;
-        text-align: center;
-      }
+        p {
+            margin: 5px 0 0 0;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
 
-      /* NEW: Style for the error message */
-      #error-message {
-        color: #ffcccc;
-        background-color: rgba(255, 0, 0, 0.2);
-        border: 1px solid #ffcccc;
-        border-radius: 10px;
-        padding: 10px;
-        margin-top: 20px;
-        max-width: 400px;
-        font-size: 0.9rem;
-      }
+        /* Custom styling for the AR Button which Three.js injects */
+        button#ARButton {
+            font-weight: bold !important;
+            border-radius: 20px !important;
+            border: 2px solid white !important;
+            background: rgba(0,0,0,0.5) !important;
+        }
     </style>
-  </head>
-  <body>
-    <!-- 
-      This overlay will be shown first. 
-      The user must click "Start" to grant camera permissions.
-    -->
-    <div id="start-overlay">
-      <div id="loader" class="hidden"></div>
-      <h1 style="margin-top: 0">Three.js AR Image Tracker</h1>
-      <p style="max-width: 400px">
-        Click "Start" to activate your camera. You will need to show it the
-        target image to see the 3D object.
-      </p>
-      <button id="start-button">Start</button>
-      <!-- NEW: Error message container -->
-      <div id="error-message" class="hidden"></div>
-      <p style="margin-top: 30px">
-        <a
-          href="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
-          target="_blank"
-          rel="noopener noreferrer"
-          style="color: #9ecbff"
-          >Open Target Image in New Tab</a
-        >
-      </p>
+</head>
+<body>
+
+    <div id="info">
+        <h1>AR Test Object Spawner</h1>
+        <p>Detect floor &bull; Tap to Spawn</p>
     </div>
 
-    <!-- This is the main container for our AR app -->
-    <div id="ar-container"></div>
-
-    <!-- Instructions that appear after starting -->
-    <div id="instructions" class="hidden">
-      Point your camera at the "MindAR" card image.
-    </div>
-
-    <!-- Main application logic -->
-    <script type="module">
-      // Import the necessary modules
-      import * as THREE from "three";
-      import { MindARThree } from "mindar-image-three";
-
-      // Wait for the DOM to be fully loaded before running the app
-      document.addEventListener("DOMContentLoaded", () => {
-        const startButton = document.getElementById("start-button");
-        const startOverlay = document.getElementById("start-overlay");
-        const loader = document.getElementById("loader");
-        const instructions = document.getElementById("instructions");
-        // NEW: Get the error message element
-        const errorMessage = document.getElementById("error-message");
-
-        let mindarThree = null;
-
-        // This function sets up and starts the AR experience
-        const startAR = async () => {
-          // NEW: Hide any previous errors
-          errorMessage.classList.add("hidden");
-
-          // --- SECURITY CHECKS ---
-          
-          // Check 1: Secure Context
-          if (!window.isSecureContext) {
-            errorMessage.innerHTML = `
-              <strong>Security Error:</strong> Camera access is blocked.<br><br>
-              You are likely accessing this via an insecure connection (HTTP).<br>
-              Browsers REQUIRE <strong>https://</strong> or <strong>localhost</strong> for AR.<br><br>
-              <em>If testing on mobile via IP (192.168...), this will not work. You need an HTTPS tunnel.</em>
-            `;
-            errorMessage.classList.remove("hidden");
-            return;
-          }
-
-          // Check 2: MediaDevices API existence
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            errorMessage.innerHTML = `
-              <strong>Browser Error:</strong> Camera API not found.<br><br>
-              Your browser may not support WebRTC or it is being blocked by a privacy setting.
-              Try using Chrome or Safari.
-            `;
-            errorMessage.classList.remove("hidden");
-            return;
-          }
-          
-          // --- END CHECKS ---
-
-          // Show loader and hide button
-          startButton.classList.add("hidden");
-          loader.classList.remove("hidden");
-
-          // 1. Initialize MindARThree
-          // We provide the container element and the path to our compiled image target.
-          // This .mind file is pre-compiled for a specific image.
-          try {
-            mindarThree = new MindARThree({
-              container: document.getElementById("ar-container"),
-              imageTargetSrc:
-                "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
-              maxTrack: 1, // Track one image at a time
-            });
-          } catch (initError) {
-             console.error("Initialization Error", initError);
-             errorMessage.textContent = "Error initializing MindAR: " + initError.message;
-             errorMessage.classList.remove("hidden");
-             startButton.classList.remove("hidden");
-             loader.classList.add("hidden");
-             return;
-          }
-
-          // 2. Get the renderer, scene, and camera from MindAR
-          const { renderer, scene, camera } = mindarThree;
-
-          // 3. Create a 3D object to place on the target
-          const geometry = new THREE.TorusKnotGeometry(0.3, 0.1, 100, 16);
-          const material = new THREE.MeshStandardMaterial({
-            color: 0x6e8efb,
-            metalness: 0.2,
-            roughness: 0.3,
-          });
-          const knot = new THREE.Mesh(geometry, material);
-          knot.position.set(0, 0, 0); // Position it at the center of the anchor
-
-          // 4. Create an anchor. The anchor is tied to the image target (index 0)
-          // The 3D object will be a child of this anchor's group.
-          const anchor = mindarThree.addAnchor(0);
-          anchor.group.add(knot); // anchor.group is a THREE.Group
-
-          // 5. Add lighting to the scene
-          const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-          scene.add(ambientLight);
-          const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-          directionalLight.position.set(1, 1, 1);
-          scene.add(directionalLight);
-
-          // 6. Start the MindAR engine
-          // This will request camera access and start tracking
-          try {
-            await mindarThree.start();
-
-            // 7. Start the render loop
-            renderer.setAnimationLoop(() => {
-              // Rotate the knot for a nice effect
-              knot.rotation.x += 0.01;
-              knot.rotation.y += 0.015;
-
-              // Render the scene
-              renderer.render(scene, camera);
-            });
-
-            // Hide the overlay and show instructions once started
-            startOverlay.classList.add("hidden");
-            instructions.classList.remove("hidden");
-          } catch (error) {
-            // Handle errors (e.g., user denies camera access)
-            console.error("Failed to start AR:", error);
-            loader.classList.add("hidden");
-            startButton.classList.remove("hidden");
-            
-            // NEW: Show a user-friendly error message instead of alert()
-            let msg = error.message;
-            if (msg.includes("Permission denied")) {
-              msg = "You denied camera access. Please reset permissions for this site and reload.";
+    <!-- Import Map to handle Three.js modules cleanly -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
             }
-            errorMessage.textContent = `Start Failed: ${msg}`;
-            errorMessage.classList.remove("hidden");
-          }
-        };
-
-        // Add click event listener to the start button
-        startButton.addEventListener("click", startAR);
-      });
+        }
     </script>
-  </body>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+        let container;
+        let camera, scene, renderer;
+        let controller;
+
+        let reticle;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+
+        // Array to store our spawned objects so we can animate them
+        const spawnedObjects = [];
+
+        init();
+        animate();
+
+        function init() {
+            container = document.createElement('div');
+            document.body.appendChild(container);
+
+            scene = new THREE.Scene();
+
+            // 1. Setup Camera
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            // 2. Lighting
+            // Ambient light for general illumination
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+            light.position.set(0.5, 1, 0.25);
+            scene.add(light);
+
+            // 3. Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true; // IMPORTANT: Enable WebXR
+            container.appendChild(renderer.domElement);
+
+            // 4. Add AR Button
+            // We request 'hit-test' as an optional feature. 
+            // If the device supports it, we get floor detection.
+            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+            // 5. Controller (Input) Setup
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            // 6. Create the Reticle (The cursor that sticks to the floor)
+            // A simple ring geometry
+            const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
+            const material = new THREE.MeshBasicMaterial();
+            reticle = new THREE.Mesh(geometry, material);
+            // Hide it by default until we find a surface
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false; 
+            scene.add(reticle);
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onSelect() {
+            // Only spawn if the reticle is visible (meaning we found a surface)
+            if (reticle.visible) {
+                spawnObject();
+            }
+        }
+
+        function spawnObject() {
+            // Create a cool "Test Object" - An Icosahedron (20-sided shape)
+            // Use random colors for variety
+            const colors = [0xff0055, 0x00aaff, 0x00ffaa, 0xffaa00, 0xaa00ff];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            const geometry = new THREE.IcosahedronGeometry(0.1, 0); // 10cm radius
+            const material = new THREE.MeshPhongMaterial({ 
+                color: randomColor,
+                flatShading: true,
+                shininess: 150
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+
+            // Position the mesh at the reticle's current location
+            // We use setFromMatrixPosition to copy the coordinates exactly
+            mesh.position.setFromMatrixPosition(reticle.matrix);
+            
+            // Add a slight random rotation
+            mesh.rotation.y = Math.random() * Math.PI;
+
+            // Add to scene and our tracking array
+            scene.add(mesh);
+            spawnedObjects.push(mesh);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render(timestamp, frame) {
+            // Animation logic for spawned objects
+            const delta = 0.01;
+            spawnedObjects.forEach(obj => {
+                obj.rotation.x += delta;
+                obj.rotation.y += delta;
+            });
+
+            if (frame) {
+                // 1. Get the reference space
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                // 2. Request Hit Test Source (only once)
+                if (hitTestSourceRequested === false) {
+                    session.requestReferenceSpace('viewer').then(function (referenceSpace) {
+                        session.requestHitTestSource({ space: referenceSpace }).then(function (source) {
+                            hitTestSource = source;
+                        });
+                    });
+
+                    session.addEventListener('end', function () {
+                        hitTestSourceRequested = false;
+                        hitTestSource = null;
+                    });
+
+                    hitTestSourceRequested = true;
+                }
+
+                // 3. Process Hit Test Results
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                    if (hitTestResults.length > 0) {
+                        // We hit a surface!
+                        const hit = hitTestResults[0];
+                        
+                        // Place reticle at the intersection point
+                        reticle.visible = true;
+                        reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+                    } else {
+                        // No surface detected currently
+                        reticle.visible = false;
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
 </html>

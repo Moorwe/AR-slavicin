@@ -1,11 +1,15 @@
-# AR-slavicin
-This repository demonstrates a simple AR image-tracking demo using MindAR and Three.js.
+## AR-slavicin
 
-The demo is a single-page web app found at `index.html`. To enable camera access in your browser, serve the project via localhost (camera access requires HTTPS or `http://localhost`).
+Simple image-tracking AR demo using Three.js and MindAR.
 
-## Usage
+The app is a single-page web app at `index.html`. Open it via a local server (camera access requires a secure origin: HTTPS or `http://localhost`).
 
-1. Install dependencies:
+**Quick start**
+
+Requirements:
+- Node.js and npm (optional)
+
+1. Install dependencies (optional — only required if you want the bundled `http-server`):
 
 ```bash
 npm install
@@ -17,28 +21,17 @@ npm install
 npm start
 ```
 
-3. Open your browser at `http://localhost:8080` and click the "Start" button to grant camera access. Then show the target image (link in the UI) to the camera.
+3. Open your browser at `http://localhost:8080` and click the **Start** button in the page to grant camera access. Then point your camera at the target image (there's a link to the example target image in the UI).
 
-## Notes
-- Uses `http-server` (dev dependency in `package.json`) for a simple local server
-- Camera access requires `http://localhost` or a secure origin (HTTPS) in modern browsers
-- If you want to change port, update the `start` script in `package.json`
+Notes:
+- The project includes a lightweight `http-server` dev dependency used by the `start` script in `package.json`.
+- Browsers require a secure origin for camera access. Use `http://localhost` for local testing or serve the site over HTTPS.
+- If you don't want to install deps, you can run a quick static server with `npx http-server ./ -p 8080`.
 
-## GitHub Pages / Published URL
-If you publish this repository via GitHub Pages (branch `main`, root), the demo will be available at:
+Assets removed:
+- `kostka.glb` and `marker-image.jpg` were not referenced by `index.html` and have been removed to keep the repo minimal.
 
-`https://Moorwe.github.io/AR-slavicin/`
+Publishing:
+- If you publish the repo with GitHub Pages (branch `main`, root), the demo will be available at `https://<your-user>.github.io/AR-slavicin/` and will run over HTTPS.
 
-The site should load over HTTPS and will prompt for camera access when you click the Start button.
-
-## Pulling the latest changes
-If you've made edits in the web editor and/or pushed changes to the `main` branch, update your local copy by running:
-
-```bash
-git pull origin main
-```
-
-If you want to test the local copy on a machine, run `npm install` and `npm start` to serve the repo over `http://localhost:8080`.
-
-## License
-MIT
+License: MIT
