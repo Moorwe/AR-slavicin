@@ -1,37 +1,41 @@
 ## AR-slavicin
 
-Simple image-tracking AR demo using Three.js and MindAR.
+WebXR AR demo using Three.js. Place virtual objects on detected surfaces using your device's camera.
 
-The app is a single-page web app at `index.html`. Open it via a local server (camera access requires a secure origin: HTTPS or `http://localhost`).
+The app is a single-page web app at `index.html`. Open it via a local server or published URL (HTTPS required for camera access).
 
 **Quick start**
 
 Requirements:
-- Node.js and npm (optional)
+- ARCore/ARKit capable device (Android with Chrome, or iOS with Safari)
+- Node.js and npm (optional, for local testing)
 
-1. Install dependencies (optional — only required if you want the bundled `http-server`):
+1. Install dependencies (optional):
 
 ```bash
 npm install
 ```
 
-2. Start the local server:
+2. Start a local server:
 
 ```bash
 npm start
 ```
 
-3. Open your browser at `http://localhost:8080` and click the **Start** button in the page to grant camera access. Then point your camera at the target image (there's a link to the example target image in the UI).
+3. Open your browser at `http://localhost:8080`. Click the **AR Button** to start the AR session. Move your device to detect surfaces, then tap to spawn objects.
+
+**Supported Browsers:**
+- Chrome on Android (requires ARCore support)
+- Safari on iOS 14+ (requires ARKit support)
 
 Notes:
-- The project includes a lightweight `http-server` dev dependency used by the `start` script in `package.json`.
-- Browsers require a secure origin for camera access. Use `http://localhost` for local testing or serve the site over HTTPS.
-- If you don't want to install deps, you can run a quick static server with `npx http-server ./ -p 8080`.
-
-Assets removed:
-- `kostka.glb` and `marker-image.jpg` were not referenced by `index.html` and have been removed to keep the repo minimal.
+- The project uses `http-server` as a lightweight dev dependency.
+- Browsers require HTTPS or `localhost` for camera access due to security policies.
+- The app uses WebXR with hit-testing to detect and place objects on real-world surfaces.
+- If you don't have Node.js, use `npx http-server ./ -p 8080`.
 
 Publishing:
-- If you publish the repo with GitHub Pages (branch `main`, root), the demo will be available at `https://<your-user>.github.io/AR-slavicin/` and will run over HTTPS.
+- Deploy to GitHub Pages (branch `main`, root) for a public HTTPS URL: `https://<user>.github.io/AR-slavicin/`
+- The site will run over HTTPS and prompt for camera permission when the AR Button is clicked.
 
 License: MIT
